@@ -11,13 +11,22 @@ from tenacity import (
     wait_random_exponential,
 )  # for exponential backoff
 import tiktoken
+from dotenv import load_dotenv
+
+load_dotenv()
+
+import os
+import openai
 
 DEV_TEST = True
 TRIALS = 25
-DEV_N_PATIENTS = 20
-MAX_INPUT_TOKENS = 15000
+DEV_N_PATIENTS = 10
+MAX_INPUT_TOKENS = 125000
 GPT_TEMPERATURE = 0.5
-GPT_ENGINE = "decile-gpt-35-turbo-16k"
+# GPT_ENGINE = "decile-gpt-35-turbo-16k"
+GPT_ENGINE = "decile-gpt-4-128K"
+# 0-indexed
+PROMPT_ITERATION = 1
 
 if DEV_TEST:
     TRIALS = 1
@@ -46,7 +55,8 @@ if DEV_TEST:
 prior_notes = pd.read_csv("/Users/vsocrates/Documents/Yale/Heart_Score/NOTES_PRIOR_IDENTIFIED_postprocessed.csv")
 ekg_notes = pd.read_csv("/Users/vsocrates/Documents/Yale/Heart_Score/EKG_HEART_IDENTIFIED_postprocessed.csv")
 # we are only using CPC notes to define our cohort and not passing them to GPT, since they contain the gold standard HEART score and may lead to data leakage
-cpc_notes = pd.read_csv("/Users/vsocrates/Documents/Yale/Heart_Score/NOTES_CPC_IDENTIFIED_postprocessed.csv")
+# cpc_notes = pd.read_csv("/Users/vsocrates/Documents/Yale/Heart_Score/NOTES_CPC_IDENTIFIED_postprocessed.csv")
+cpc_notes = pd.read_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/NOTES_CPC_IDENTIFIED_postprocessed_{PROMPT_ITERATION}.csv")
 
 prior_notes = prior_notes.rename({
                                   "PAT_ENC_CSN_ID":"CPC_PAT_ENC_CSN_ID",
@@ -180,6 +190,7 @@ print(f"After drop missing patients size: {cpc_notes_processed.shape[0]}")
 prompts = pd.read_csv("/Users/vsocrates/Documents/Yale/Heart_Score/prompt_iteration_for_GPT.csv")
 
 system_role_prompt = prompts[prompts['Step'] == "INSTRUCTIONAL_PHRASE"]['Prompt'].squeeze()
+age_prompt = prompts[prompts['Step'] == "Age"]['Prompt'].squeeze()
 history_prompt = prompts[prompts['Step'] == "History"]['Prompt'].squeeze()
 ekg_prompt = prompts[prompts['Step'] == "EKG"]['Prompt'].squeeze()
 risks_prompt = prompts[prompts['Step'] == "Risk_Factors"]['Prompt'].squeeze()
@@ -187,9 +198,10 @@ onepass_prompt = prompts[prompts['Step'] == "OnePass_Prompt"]['Prompt'].squeeze(
 
 
 openai.api_type = "azure"
-openai.api_base = "https://decile-openai-llm.openai.azure.com/"
 openai.api_version = "2023-07-01-preview"
-openai.api_key = "02582884a0604debb3f53092fbaf630d" #os.getenv("OPENAI_API_KEY")
+openai.api_key = os.getenv("AZURE_OPENAI_KEY")
+openai.api_base = os.getenv("AZURE_OPENAI_ENDPOINT")
+
 
 @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
 def completion_with_backoff(**kwargs):
@@ -238,6 +250,7 @@ def get_onepass_subscores_from_completion(completion):
     history_subscore = "ERROR History Subscore - No number found"
     ekg_subscore = "ERROR EKG Subscore - No number found"
     risks_subscore = "ERROR Risks Subscore - No number found"    
+    age_subscore = "ERROR Age Subscore - No number found"    
 
     # even if we have more than 3 bracketed sections, by looping over all of them, we get the latest (closest to end of GPT answer) bracketed response per subscore
     for bracketed_info in bracketed_infos:
@@ -247,8 +260,10 @@ def get_onepass_subscores_from_completion(completion):
             ekg_subscore = get_subscore_from_bracketed_answer(bracketed_info)
         elif re.search(r"\[Risk", bracketed_info, re.IGNORECASE):
             risks_subscore = get_subscore_from_bracketed_answer(bracketed_info)
+        elif re.search(r"\[Age", bracketed_info, re.IGNORECASE):
+            age_subscore = get_subscore_from_bracketed_answer(bracketed_info)
 
-    return history_subscore, ekg_subscore, risks_subscore
+    return history_subscore, ekg_subscore, age_subscore, risks_subscore
 
 # completion = completion_with_backoff(engine="decile-gpt-35-turbo-16k",
 #                                      messages = message_text,
@@ -261,6 +276,7 @@ def get_onepass_subscores_from_completion(completion):
 #                                     )
 
 history_df = []
+age_df = []
 ekg_df = []
 risks_df = []
 onepass_df = []
@@ -273,6 +289,9 @@ for idx, (_, row) in enumerate(cpc_notes_processed.iterrows()):
     # history
     history_message_text = [{"role":"system","content":system_role_prompt},
                     {"role":"user","content":history_prompt[:history_prompt.rfind("{")] + row['Current_Note'] + '"""'}]
+    # age
+    age_message_text = [{"role":"system","content":system_role_prompt},
+                    {"role":"user","content":age_prompt[:age_prompt.rfind("{")] + row['Current_Note'] + '"""'}]
     # ekg
     ekg_message_text = [{"role":"system","content":system_role_prompt},
                     {"role":"user","content":ekg_prompt[:ekg_prompt.rfind("{")] + row['Current_EKG'] + '"""'}]
@@ -284,9 +303,9 @@ for idx, (_, row) in enumerate(cpc_notes_processed.iterrows()):
                     {"role":"user","content":onepass_prompt[:onepass_prompt.rfind("{")] + row['All_Notes'] + '"""'}]
 
     # individual subscores
-    for category, df, prompt in zip(["history", "ekg", "risk_factors"],
-                            [history_df, ekg_df, risks_df],
-                            [history_message_text, ekg_message_text, risks_message_text]):
+    for category, df, prompt in zip(["history", "age", "ekg", "risk_factors"],
+                            [history_df, age_df, ekg_df, risks_df],
+                            [history_message_text, age_message_text, ekg_message_text, risks_message_text]):
         for trial in range(TRIALS):
             output = {}
             completion = completion_with_backoff(engine=GPT_ENGINE,
@@ -296,6 +315,7 @@ for idx, (_, row) in enumerate(cpc_notes_processed.iterrows()):
 
             output['DeID'] = row['DeID']
             output['completion'] = json.dumps(completion)
+            output['completion_text'] = completion['choices'][0]['message']['content']
             output['attempt_number'] = trial
             output['section'] = category
             output['subscore'] = get_subscore_from_completion(completion['choices'][0]['message']['content'])
@@ -313,23 +333,28 @@ for idx, (_, row) in enumerate(cpc_notes_processed.iterrows()):
         
         output['DeID'] = row['DeID']
         output['completion'] = json.dumps(completion)
+        output['completion_text'] = completion['choices'][0]['message']['content']
         output['attempt_number'] = trial
         output['section'] = "onepass"
-        history_subscore, ekg_subscore, risks_subscore = get_onepass_subscores_from_completion(completion['choices'][0]['message']['content'])
+        history_subscore, ekg_subscore, age_subscore, risks_subscore = get_onepass_subscores_from_completion(completion['choices'][0]['message']['content'])
         output['history_subscore'] = history_subscore
         output['ekg_subscore'] = ekg_subscore
+        output['age_subscore'] = age_subscore
         output['risks_subscore'] = risks_subscore
 
         onepass_df.append(output)
 
 
 history_df = pd.DataFrame.from_records(history_df)
+age_df = pd.DataFrame.from_records(age_df)
 ekg_df = pd.DataFrame.from_records(ekg_df)
 risks_df = pd.DataFrame.from_records(risks_df)
 onepass_df = pd.DataFrame.from_records(onepass_df)
 
-cpc_notes_processed.to_csv("/Users/vsocrates/Documents/Yale/Heart_Score/output/cpc_notes_with_gpt_input.csv")
-history_df.to_csv("/Users/vsocrates/Documents/Yale/Heart_Score/output/history_sample.csv")
-ekg_df.to_csv("/Users/vsocrates/Documents/Yale/Heart_Score/output/ekg_sample.csv")
-risks_df.to_csv("/Users/vsocrates/Documents/Yale/Heart_Score/output/risks_sample.csv")
-onepass_df.to_csv("/Users/vsocrates/Documents/Yale/Heart_Score/output/onepass_sample.csv")
+
+cpc_notes_processed.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/cpc_notes_with_gpt_input_{str(PROMPT_ITERATION + 1)}.csv")
+history_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/history_sample_{str(PROMPT_ITERATION + 1)}.csv")
+age_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/age_sample_{str(PROMPT_ITERATION + 1)}.csv")
+ekg_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/ekg_sample_{str(PROMPT_ITERATION + 1)}.csv")
+risks_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/risks_sample_{str(PROMPT_ITERATION + 1)}.csv")
+onepass_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/onepass_sample_{str(PROMPT_ITERATION + 1)}.csv")
