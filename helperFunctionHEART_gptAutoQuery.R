@@ -12,7 +12,7 @@
 #n_future <- 10
 #plan(multisession, workers = n_future)
 
-OPENAI_API_KEY <- "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"
+OPENAI_API_KEY <- Sys.getenv("OPENAI_KEY")
 
 #These values are set in the main document:
 #MODEL <- "gpt-3.5-turbo"
