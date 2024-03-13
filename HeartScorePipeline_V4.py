@@ -26,7 +26,7 @@ GPT_TEMPERATURE = 0.5
 # GPT_ENGINE = "decile-gpt-35-turbo-16k"
 GPT_ENGINE = "decile-gpt-4-128K"
 # 0-indexed
-PROMPT_ITERATION = 1
+PROMPT_ITERATION = 2
 
 if DEV_TEST:
     TRIALS = 1
@@ -111,7 +111,9 @@ def get_notes_by_enc_ID(row):
     
     previous_prior_notes_row = prior_notes_row.iloc[1:]
     
-    current_ekg_notes_row = ekg_notes[(ekg_notes['DeID'] == row['DeID'])]
+    # 3/4/2024: we want to also drop all EKGs that are after the CPC note was created
+    current_ekg_notes_row = ekg_notes[(ekg_notes['DeID'] == row['DeID']) & 
+                                      (ekg_notes["RESULT_TIME"] < row["ArrivalInstant"])]
     current_ekg_notes_row = current_ekg_notes_row.sort_values("RESULT_TIME", ascending=True)
 
     current_note_txt = ("#####################################\nCURRENT ED PROVIDER NOTE: \n\n\n" +
