@@ -63,10 +63,11 @@ prior_notes = prior_notes.rename({
                                   "Document_Time":"_CreationInstant"}, axis=1)
 cpc_notes = cpc_notes.rename({"note_id":"DeID"}, axis=1)
 
+
 # Cast to datetime
-prior_notes["_CreationInstant"] = pd.to_datetime(prior_notes['_CreationInstant']).apply(lambda t: t.replace(tzinfo=None))
-ekg_notes["RESULT_TIME"] = pd.to_datetime(ekg_notes['RESULT_TIME']).apply(lambda t: t.replace(tzinfo=None))
-cpc_notes["ArrivalInstant"] = pd.to_datetime(cpc_notes['ArrivalInstant']).apply(lambda t: t.replace(tzinfo=None))
+prior_notes["_CreationInstant"] = pd.to_datetime(prior_notes['_CreationInstant']).dt.tz_localize(None)
+ekg_notes["RESULT_TIME"] = pd.to_datetime(ekg_notes['RESULT_TIME']).dt.tz_localize(None)
+cpc_notes["ArrivalInstant"] = pd.to_datetime(cpc_notes['ArrivalInstant']).dt.tz_localize(None)
 
 # we need the ArrivalInstant to the CPC Encounter because we can't use the _CreationInstant to need to create a time delta
 prior_notes = prior_notes.merge(cpc_notes[['DeID', "ArrivalInstant"]], on="DeID").rename({"ArrivalInstant":"CPC_ArrivalInstant"}, axis=1)
@@ -112,9 +113,11 @@ def get_notes_by_enc_ID(row):
     previous_prior_notes_row = prior_notes_row.iloc[1:]
     
     # 3/4/2024: we want to also drop all EKGs that are after the CPC note was created
-    current_ekg_notes_row = ekg_notes[(ekg_notes['DeID'] == row['DeID']) & 
-                                      (ekg_notes["RESULT_TIME"] < row["ArrivalInstant"])]
-    current_ekg_notes_row = current_ekg_notes_row.sort_values("RESULT_TIME", ascending=True)
+    # 3/21/2024: we were having some issues with dates, so we just took the first one
+    current_ekg_notes_row = ekg_notes[(ekg_notes['DeID'] == row['DeID'])]
+    current_ekg_notes_row = current_ekg_notes_row.sort_values("RESULT_TIME", ascending=True).iloc[[0]]
+    display(current_ekg_notes_row)
+
 
     current_note_txt = ("#####################################\nCURRENT ED PROVIDER NOTE: \n\n\n" +
                                            "\nType: " + current_note["Type"] + 
@@ -198,7 +201,8 @@ ekg_prompt = prompts[prompts['Step'] == "EKG"]['Prompt'].squeeze()
 risks_prompt = prompts[prompts['Step'] == "Risk_Factors"]['Prompt'].squeeze()
 onepass_prompt = prompts[prompts['Step'] == "OnePass_Prompt"]['Prompt'].squeeze()
 
-
+print(os.getenv("AZURE_OPENAI_KEY"))
+print(os.getenv("AZURE_OPENAI_ENDPOINT"))
 openai.api_type = "azure"
 openai.api_version = "2023-07-01-preview"
 openai.api_key = os.getenv("AZURE_OPENAI_KEY")
