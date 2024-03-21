@@ -116,8 +116,6 @@ def get_notes_by_enc_ID(row):
     # 3/21/2024: we were having some issues with dates, so we just took the first one
     current_ekg_notes_row = ekg_notes[(ekg_notes['DeID'] == row['DeID'])]
     current_ekg_notes_row = current_ekg_notes_row.sort_values("RESULT_TIME", ascending=True).iloc[[0]]
-    display(current_ekg_notes_row)
-
 
     current_note_txt = ("#####################################\nCURRENT ED PROVIDER NOTE: \n\n\n" +
                                            "\nType: " + current_note["Type"] + 
