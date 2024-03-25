@@ -20,7 +20,7 @@ import openai
 
 DEV_TEST = True
 TRIALS = 25
-DEV_N_PATIENTS = 10
+DEV_N_PATIENTS = 2
 MAX_INPUT_TOKENS = 125000
 GPT_TEMPERATURE = 0.5
 # GPT_ENGINE = "decile-gpt-35-turbo-16k"
@@ -54,6 +54,7 @@ if DEV_TEST:
 # Read the csv spreadsheet into a dataframe called "allNotes"
 prior_notes = pd.read_csv("/Users/vsocrates/Documents/Yale/Heart_Score/NOTES_PRIOR_IDENTIFIED_postprocessed.csv")
 ekg_notes = pd.read_csv("/Users/vsocrates/Documents/Yale/Heart_Score/EKG_HEART_IDENTIFIED_postprocessed.csv")
+troponin_vals = pd.read_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/trop_sorted.csv")
 # we are only using CPC notes to define our cohort and not passing them to GPT, since they contain the gold standard HEART score and may lead to data leakage
 # cpc_notes = pd.read_csv("/Users/vsocrates/Documents/Yale/Heart_Score/NOTES_CPC_IDENTIFIED_postprocessed.csv")
 cpc_notes = pd.read_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/NOTES_CPC_IDENTIFIED_postprocessed_{PROMPT_ITERATION}.csv")
@@ -67,6 +68,7 @@ cpc_notes = cpc_notes.rename({"note_id":"DeID"}, axis=1)
 # Cast to datetime
 prior_notes["_CreationInstant"] = pd.to_datetime(prior_notes['_CreationInstant']).dt.tz_localize(None)
 ekg_notes["RESULT_TIME"] = pd.to_datetime(ekg_notes['RESULT_TIME']).dt.tz_localize(None)
+troponin_vals = troponin_vals.astype({"RESULT_TIME":"datetime64[ns]"})
 cpc_notes["ArrivalInstant"] = pd.to_datetime(cpc_notes['ArrivalInstant']).dt.tz_localize(None)
 
 # we need the ArrivalInstant to the CPC Encounter because we can't use the _CreationInstant to need to create a time delta
@@ -89,6 +91,7 @@ cpc_notes = cpc_notes.drop_duplicates()
 # sort notes by ENC_ID and date/time
 prior_notes = prior_notes.sort_values(["DeID", "_CreationInstant"], ascending=False)
 ekg_notes = ekg_notes.sort_values(["DeID", "RESULT_TIME"], ascending=True)
+troponin_vals = troponin_vals.sort_values(['PAT_ENC_CSN_ID', "RESULT_TIME"], ascending=True)
 
 # create note index within each patient
 prior_notes['note_num'] = prior_notes.groupby("DeID").cumcount()+1
@@ -148,28 +151,38 @@ def get_notes_by_enc_ID(row):
         previous_prior_notes_txt = ""
 
     current_ekg_notes_txt = "\n\n\n".join(current_ekg_notes_row['compiledText'].tolist())
+    
+    troponin_vals_row = troponin_vals[troponin_vals['PAT_ENC_CSN_ID'] == row['PAT_ENC_CSN_ID']]
+    troponin_vals_row = troponin_vals_row.sort_values("RESULT_TIME", ascending=True).iloc[0]
 
-    ## we need 3 things for the HEART Score so we create them below
-    # History, Age, Troponin: Current Encounter Note (ED Provider Notes)
+    ## we need 4 things for the HEART Score so we create them below
+    # History, Age: Current Encounter Note (ED Provider Notes)
     # EKGs: All Current EKGs
     # Risk Factors: Current/Prior All Note Types
+    # Troponin: Structured Troponin into Text
+    common_name = troponin_vals_row['COMMON_NAME']  if not pd.isnull(troponin_vals_row['COMMON_NAME']) else "None"
+    ord_value = troponin_vals_row['ORD_VALUE'] if not pd.isnull(troponin_vals_row['ORD_VALUE']) else "None"
+    reference_unit = troponin_vals_row['REFERENCE_UNIT'] if not pd.isnull(troponin_vals_row['REFERENCE_UNIT']) else "None"
+    troponin_txt = f"LABORATORY RESULT\nTroponin Assay: {common_name}\nTroponin Result Value: {ord_value}\nTroponin Reference Range: {reference_unit}"
 
     # we don't have person_IDs for EKGs so we can't use prior EKGs from before the CPC encounter
     # all_notes_txt = previous_prior_notes_txt + "\n\n\n" + previous_ekg_notes_txt + "\n\n\n" + current_prior_notes_txt + "\n\n\n" + current_ekg_notes_txt
-    all_notes_txt = current_note_txt + "\n\n\n" + current_ekg_notes_txt + "\n\n\n" + previous_prior_notes_txt 
+    all_notes_txt = current_note_txt + "\n\n\n" + current_ekg_notes_txt + "\n\n\n" + troponin_txt + "\n\n\n"  + previous_prior_notes_txt 
 
     # we have to truncate to the context window allowable by the GPT model
     current_note_txt = encoding.decode(encoding.encode(current_note_txt)[:MAX_INPUT_TOKENS])
     current_ekg_notes_txt = encoding.decode(encoding.encode(current_ekg_notes_txt)[:MAX_INPUT_TOKENS])
     all_notes_txt = encoding.decode(encoding.encode(all_notes_txt)[:MAX_INPUT_TOKENS])
 
-    return current_note_txt, current_ekg_notes_txt, all_notes_txt
+    return current_note_txt, current_ekg_notes_txt, all_notes_txt, troponin_txt
 
 
 gpt_input = cpc_notes.apply(get_notes_by_enc_ID, axis=1, result_type="expand")
+# TODO: we want to include troponin as a text element here? How? are the end of our current note? 
 gpt_input = gpt_input.rename({0:"Current_Note", 
                               1:"Current_EKG",
-                              2:"All_Notes"}, axis=1)
+                              2:"All_Notes",
+                              3:"Troponin"}, axis=1)
 
 cpc_notes_processed = pd.concat([cpc_notes, gpt_input], axis=1)
 
@@ -197,6 +210,7 @@ age_prompt = prompts[prompts['Step'] == "Age"]['Prompt'].squeeze()
 history_prompt = prompts[prompts['Step'] == "History"]['Prompt'].squeeze()
 ekg_prompt = prompts[prompts['Step'] == "EKG"]['Prompt'].squeeze()
 risks_prompt = prompts[prompts['Step'] == "Risk_Factors"]['Prompt'].squeeze()
+troponin_prompt = prompts[prompts['Step'] == "Troponin"]['Prompt'].squeeze()
 onepass_prompt = prompts[prompts['Step'] == "OnePass_Prompt"]['Prompt'].squeeze()
 
 print(os.getenv("AZURE_OPENAI_KEY"))
@@ -255,6 +269,7 @@ def get_onepass_subscores_from_completion(completion):
     ekg_subscore = "ERROR EKG Subscore - No number found"
     risks_subscore = "ERROR Risks Subscore - No number found"    
     age_subscore = "ERROR Age Subscore - No number found"    
+    troponin_subscore = "ERROR Troponin Subscore - No number found"
 
     # even if we have more than 3 bracketed sections, by looping over all of them, we get the latest (closest to end of GPT answer) bracketed response per subscore
     for bracketed_info in bracketed_infos:
@@ -266,8 +281,10 @@ def get_onepass_subscores_from_completion(completion):
             risks_subscore = get_subscore_from_bracketed_answer(bracketed_info)
         elif re.search(r"\[Age", bracketed_info, re.IGNORECASE):
             age_subscore = get_subscore_from_bracketed_answer(bracketed_info)
+        elif re.search(r"\[Troponin", bracketed_info, re.IGNORECASE):
+            troponin_subscore = get_subscore_from_bracketed_answer(bracketed_info)
 
-    return history_subscore, ekg_subscore, age_subscore, risks_subscore
+    return history_subscore, ekg_subscore, age_subscore, risks_subscore, troponin_subscore
 
 # completion = completion_with_backoff(engine="decile-gpt-35-turbo-16k",
 #                                      messages = message_text,
@@ -283,6 +300,7 @@ history_df = []
 age_df = []
 ekg_df = []
 risks_df = []
+troponin_df = []
 onepass_df = []
 
 if DEV_TEST:
@@ -302,14 +320,17 @@ for idx, (_, row) in enumerate(cpc_notes_processed.iterrows()):
     # risk factors
     risks_message_text = [{"role":"system","content":system_role_prompt},
                     {"role":"user","content":risks_prompt[:risks_prompt.rfind("{")] + row['All_Notes'] + '"""'}]
+    # troponin
+    troponin_message_text = [{"role":"system","content":system_role_prompt},
+                    {"role":"user","content":troponin_prompt[:troponin_prompt.rfind("{")] + row['Troponin'] + '"""'}]
     # one pass
     onepass_message_text = [{"role":"system","content":system_role_prompt},
                     {"role":"user","content":onepass_prompt[:onepass_prompt.rfind("{")] + row['All_Notes'] + '"""'}]
 
     # individual subscores
-    for category, df, prompt in zip(["history", "age", "ekg", "risk_factors"],
-                            [history_df, age_df, ekg_df, risks_df],
-                            [history_message_text, age_message_text, ekg_message_text, risks_message_text]):
+    for category, df, prompt in zip(["history", "age", "ekg", "risk_factors", "troponin"],
+                            [history_df, age_df, ekg_df, risks_df, troponin_df],
+                            [history_message_text, age_message_text, ekg_message_text, risks_message_text, troponin_message_text]):
         for trial in range(TRIALS):
             output = {}
             completion = completion_with_backoff(engine=GPT_ENGINE,
@@ -340,11 +361,12 @@ for idx, (_, row) in enumerate(cpc_notes_processed.iterrows()):
         output['completion_text'] = completion['choices'][0]['message']['content']
         output['attempt_number'] = trial
         output['section'] = "onepass"
-        history_subscore, ekg_subscore, age_subscore, risks_subscore = get_onepass_subscores_from_completion(completion['choices'][0]['message']['content'])
+        history_subscore, ekg_subscore, age_subscore, risks_subscore, troponin_subscore = get_onepass_subscores_from_completion(completion['choices'][0]['message']['content'])
         output['history_subscore'] = history_subscore
         output['ekg_subscore'] = ekg_subscore
         output['age_subscore'] = age_subscore
         output['risks_subscore'] = risks_subscore
+        output['troponin_subscore'] = troponin_subscore
 
         onepass_df.append(output)
 
@@ -353,6 +375,7 @@ history_df = pd.DataFrame.from_records(history_df)
 age_df = pd.DataFrame.from_records(age_df)
 ekg_df = pd.DataFrame.from_records(ekg_df)
 risks_df = pd.DataFrame.from_records(risks_df)
+troponin_df = pd.DataFrame.from_records(troponin_df)
 onepass_df = pd.DataFrame.from_records(onepass_df)
 
 
@@ -361,4 +384,5 @@ history_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/history_s
 age_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/age_sample_{str(PROMPT_ITERATION + 1)}.csv")
 ekg_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/ekg_sample_{str(PROMPT_ITERATION + 1)}.csv")
 risks_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/risks_sample_{str(PROMPT_ITERATION + 1)}.csv")
+troponin_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/troponin_sample_{str(PROMPT_ITERATION + 1)}.csv")
 onepass_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/onepass_sample_{str(PROMPT_ITERATION + 1)}.csv")
