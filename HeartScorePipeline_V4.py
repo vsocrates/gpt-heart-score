@@ -20,13 +20,13 @@ import openai
 
 DEV_TEST = True
 TRIALS = 25
-DEV_N_PATIENTS = 2
+DEV_N_PATIENTS = 50 #10
 MAX_INPUT_TOKENS = 125000
 GPT_TEMPERATURE = 0.5
 # GPT_ENGINE = "decile-gpt-35-turbo-16k"
 GPT_ENGINE = "decile-gpt-4-128K"
 # 0-indexed
-PROMPT_ITERATION = 2
+PROMPT_ITERATION = 999
 
 if DEV_TEST:
     TRIALS = 1
@@ -62,6 +62,7 @@ cpc_notes = pd.read_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/NOTES_CPC_
 prior_notes = prior_notes.rename({
                                   "PAT_ENC_CSN_ID":"CPC_PAT_ENC_CSN_ID",
                                   "Document_Time":"_CreationInstant"}, axis=1)
+# I'm not sure this line does anything? There is no column called note_id in the subsets...
 cpc_notes = cpc_notes.rename({"note_id":"DeID"}, axis=1)
 
 
@@ -221,7 +222,7 @@ openai.api_key = os.getenv("AZURE_OPENAI_KEY")
 openai.api_base = os.getenv("AZURE_OPENAI_ENDPOINT")
 
 
-@retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
+@retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(10))
 def completion_with_backoff(**kwargs):
     return openai.ChatCompletion.create(**kwargs)
 
@@ -263,7 +264,7 @@ def get_onepass_subscores_from_completion(completion):
     bracketed_infos = get_classification_from_completion(completion, last_only=False)
 
     if type(bracketed_infos) == str:
-        return ["ERROR - No bracketed phrase","ERROR - No bracketed phrase","ERROR - No bracketed phrase"]
+        return ["ERROR - No bracketed phrase","ERROR - No bracketed phrase","ERROR - No bracketed phrase","ERROR - No bracketed phrase","ERROR - No bracketed phrase",]
 
     history_subscore = "ERROR History Subscore - No number found"
     ekg_subscore = "ERROR EKG Subscore - No number found"
