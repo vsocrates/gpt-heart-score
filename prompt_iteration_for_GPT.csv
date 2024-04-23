@@ -1,0 +1,203 @@
+﻿Step,Relevant_Notes,Prompt,VERSION
+INSTRUCTIONAL_PHRASE,,You are a cardiologist consulted by the Emergency Department for a patient with a potential myocardial infarction (MI). The HEART score is applied to determine the risk of major adverse cardiac events (MACE) and to help decide between admitting or discharging the patient. Please be concise in your answers.,V14
+History,Current_Notes,"""""""""""""""
+PROMPT:
+You will be given clinical encounter notes relevant to the patient's current visit below, delimited by triple quotes. Considering the patient's symptoms and presentation (the patient's HPI), please determine the patient's history subscore (one component of the overall HEART score). Base your judgment only on the scoring system below for the patient’s presenting symptoms below. 
+Follow the following steps: 
+1.	Extract and summarize the components of the note describing the characteristics of the chest pain pattern, triggers, localization, related symptoms, and reaction to sublingual nitrates. Do not include information about the patient’s past medical history.
+2.	Classify the chest pain using the following scale:
+
+Choose between these options in brackets: [Slightly suspicious (0)] [Moderately suspicious (1)] [Highly suspicious (2)] 
+For clarity on scoring:
+- Choose [Slightly suspicious (0)] for nonspecific history lacking clear chest pain patterns, triggers, localization, related symptoms, and/or reactions to sublingual nitrates.
+- Choose [Moderately suspicious (1)] for moderately suspicious history that contains traditional & non-traditional elements of typical MI presentation.
+- Choose [Highly suspicious (2)] for highly suspicious history mainly comprising traditional features of typical MI presentation.
+
+If there is not enough information provided in the notes, or if the patient history is altogether not provided, please choose:
+[Not enough information - Pt history not present]
+
+Use this format for your response: First explain your reasoning, then conclude with your answer in brackets by choosing between the options above, e.g., [Slightly suspicious (0)]
+
+PATIENT ENCOUNTER NOTES:
+""""""""""""""""""""""""""""""""""""""""""""""""
+{CurrentNotes}
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""",
+Age,Current_Notes,"""
+PROMPT:
+You will be given clinical encounter notes relevant to the patient's current visit below, delimited by triple quotes. Considering the patient's HPI, please determine the patient's age subscore (one component of the overall HEART score). 
+If the age is <45, the correct score is [Age <45 (0)]
+If the age is 45-64, the correct score is [Age 45-64 (1)]
+If the age is 65 or older, the correct score is [Age >= 65 (2)]
+If multiple ages are reported in the note, use the oldest one.
+
+If there is not enough information provided in the notes, please choose:
+[Not enough information - Pt age not present]
+
+Use this format for your response: First explain your reasoning, then conclude with your answer in brackets, e.g., [Age <45 (0)]
+
+PATIENT ENCOUNTER NOTES:
+""""""""""""
+{CurrentNotes}
+""""""""""""""",
+Troponin,Current_Notes,"""""""""""""""
+PROMPT:
+You will be given a laboratory results note relevant to the patient's current visit below, delimited by triple quotes. Considering the following scale and the laboratory results and reference ranges provided in the laboratory results note.
+Additionally, if the name of the troponin assay in the laboratory result note contains the phrases high sensitivity, hs- or other indication it is a high sensitivity assay, assume the units are ng/L and use 11 ng/L as the upper reference limit. Also, add the symbol * to the end of the reported score and report in your interpretation that this result may be inaccurate as the HEART score was originally validated with traditional troponin assays only.
+First, calculate the value for 3 times the upper limit of normal as you will need this value later.
+Choose between these options in brackets: [< normal limit (0)] [1-3x normal limit (1)] [>3x normal limit (2)] 
+For clarity on scoring:
+- Choose [< normal limit (0)] if the reported troponin results is less than the reported upper reference limit.
+- Choose [1-3x normal limit (1)] if the reported troponin result is greater than the reported upper reference limit but is not greater than 3 times the upper reference limit.
+- Choose [>3x normal limit (2)] if the reported troponin results is greater than 3 times the reported upper reference limit.
+If there is not enough information provided in the notes, or if the patient history is altogether not provided, please choose:
+[Not enough information - Pt troponin not present]
+
+Use this format for your response: First explain your reasoning, then conclude with your answer in brackets by choosing between the options above, e.g., [< normal limit (0)]
+
+PATIENT ENCOUNTER NOTES:
+""""""""""""""""""""""""""""""""""""""""""""""""
+{Troponin}
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""",
+EKG,Current_EKG,"""""""
+PROMPT:
+You will be given clinical encounter notes relevant to the patient's current visit below, delimited by triple quotes. An electrocardiogram (EKG) reading for the patient should be present in one of the notes below. Considering the patient's EKG, please determine the patient's EKG subscore (one component of the overall HEART score). 
+
+Choose between these options in brackets: [Normal (0)] [Non-specific repolarization disturbance (1)] [Significant ST deviation (2)] 
+For clarity on scoring:
+- Choose [Normal (0)] if the EKG is 'normal' according to Minnesota criteria.
+- Choose [Non-specific repolarization disturbance (1)] for:
+     - Repolarization abnormalities without significant ST-segment depression, for example t-wave changes or insignificant ST-segment depression or elevation.
+     - Presence of a bundle branch block. Nonspecific intraventricular conduction delay is not sufficient.
+     - Typical abnormalities indicative of left ventricular hypertrophy.
+     - Repolarization abnormalities likely due to the use of digoxin.
+- Choose [Significant ST deviation (2)] for significant ST-segment depressions or elevations, unless these are seen in the context of a bundle branch block, left ventricular hypertrophy, or the use of digoxin. Do not infer the presence of significant ST-segment changes, only conclude this if explicitly stated.
+- If the EKG does not have any of the above abnormalities, assign it a score of [Normal (0)]. The EKG should also be considered normal if none of these things are commented on in the report.
+
+If an EKG is not provided, instead provide the response of [Not enough information - Pt EKG interpretation not present].
+
+Use this format for your response: First explain your reasoning. Conclude by picking, without alteration, one of the bracketed choices above. An example end to your response would be: [Normal (0)]
+
+PATIENT ENCOUNTER NOTES:
+""""""""""""""""""""""""
+{CurrentEKG}
+""""""""""""""""""""""""""""""",
+Risk_Factors,All_Notes,"""
+PROMPT:
+You will be given clinical encounter notes relevant to the patient's current and previous visits below, delimited by triple quotes.
+
+Consider the following specific risk factors:
+- currently treated diabetes mellitus,
+- current or recent (<90 days) smoker,
+- diagnosed and/or treated hypertension,
+- diagnosed hypercholesterolemia,
+- family history of coronary artery disease,
+- current obesity (body mass index [BMI] >30), or
+- a history of significant atherosclerosis strictly defined as the following: (coronary revascularization, myocardial infarction, stroke, or peripheral arterial disease). Do not infer the presence of atherosclerosis unless these specific diagnoses are listed.
+
+Step 1) For the patient notes below, across all the combined encounter notes, how many of the specific risk factors from the list above are present for the patient? Do not assume the presence of a risk factor unless it is explicitly stated. Do not include cardiac risk factors not in the above list.
+
+Step 2) Please determine the patient's risk factor subscore (one component of the overall HEART score).
+Choose between these options in brackets: [No known risk factors (0)] [1-2 risk factors (1)] [>= 3 risk factors or any history of atherosclerotic disease (2)]
+If a history of significant atherosclerosis as strictly defined above is present, the risk score is always [>= 3 risk factors or any history of atherosclerotic disease (2)]. Do not assume significant atherosclerosis is present unless those specific diagnoses are present.
+
+If there is not enough information provided in the notes to determine a risk factor subscore, please choose:
+[Not enough information - Pt risk factors not present]
+
+
+Use this format for your response: First explain your reasoning. Conclude by picking, without alteration, one of the bracketed choices above. An example end to your response would be: [No known risk factors (0)]
+
+PATIENT ENCOUNTER NOTES:
+""""""""""""
+{AllNotes}
+""""""""""""""",
+OnePass_Prompt,All_Notes,"""""""""""""""
+PROMPT:
+You will be given clinical encounter notes relevant to the patient's current and previous visits below, delimited by triple quotes. Based on careful review of these notes, please evaluate three subscores of the HEART score, specifically the History, EKG, and Risks Factor subscores.
+
+Here are the detailed scoring instructions for the three subscores:
+
+1) History: Considering the patient's symptoms and presentation (the patient's HPI), please determine the patient's history subscore (one component of the overall HEART score). Consider the patient's symptoms and presentation from the current encounter (encounter notes with the phrase """"""""""""""""CURRENT ED PROVIDER NOTE"""""""""""""""" from the delimited list of notes below). Base your judgment only on the scoring system below for the patient’s presenting symptoms below. 
+Follow the following steps: 
+
+a.	Extract and summarize the components of the note describing the characteristics of the chest pain pattern, triggers, localization, related symptoms, and reaction to sublingual nitrates. Do not include information about the patient’s past medical history.
+b.	Classify the chest pain using the following scale:
+
+Choose between these options in brackets: [History Subscore = Slightly suspicious (0)] [History Subscore = Moderately suspicious (1)] [History Subscore = Highly suspicious (2)] 
+For clarity on scoring:
+- Choose [History Subscore = Slightly suspicious (0)] for nonspecific history lacking clear chest pain patterns, triggers, localization, related symptoms, and/or reactions to sublingual nitrates.
+- Choose [History Subscore = Moderately suspicious (1)] for moderately suspicious history that contains traditional & non-traditional elements of typical MI presentation.
+- Choose [History Subscore = Highly suspicious (2)] for highly suspicious history mainly comprising traditional features of typical MI presentation.
+
+
+2) EKG: Review the electrocardiogram (EKG/ECG) findings from the current encounter (encounter notes with the phrase """"""""""""""""CURRENT ED PROVIDER NOTE"""""""""""""""" from the delimited list of notes below). 
+
+Choose between these options in brackets: [EKG Subscore = Normal (0)] [EKG Subscore = Non-specific repolarization disturbance (1)] [EKG Subscore = Significant ST deviation (2)] 
+For clarity on scoring:
+- Choose [EKG Subscore = Normal (0)] if the EKG is 'normal' according to Minnesota criteria.
+- Choose [EKG Subscore = Non-specific repolarization disturbance (1)] for:
+     - Repolarization abnormalities without significant ST-segment depression, for example t-wave changes or insignificant ST-segment depression or elevation.
+     - Presence of a bundle branch block. Nonspecific intraventricular conduction delay is not sufficient.
+     - Typical abnormalities indicative of left ventricular hypertrophy.
+     - Repolarization abnormalities likely due to the use of digoxin.
+- Choose [EKG Subscore = Significant ST deviation (2)] for significant ST-segment depressions or elevations, unless these are seen in the context of a bundle branch block, left ventricular hypertrophy, or the use of digoxin. Do not infer the presence of significant ST-segment changes, only conclude this if explicitly stated.
+- If the EKG does not have any of the above abnormalities, assign it a score of [EKG Subscore = Normal (0)]. The EKG should also be considered normal if none of these things are commented on in the report.
+
+If an EKG is not provided, instead provide the response of [Not enough information - Pt EKG interpretation not present].
+
+
+3) Age: Considering the patient's HPI, please determine the patient's age subscore (one component of the overall HEART score). 
+For clarity on scoring:
+If the age is <45, the correct score is [Age Subscore = <45 (0)]
+If the age is 45-64, the correct score is [Age Subscore = 45-64 (1)]
+If the age is 65 or older, the correct score is [Age Subscore = >= 65 (2)]
+If multiple ages are reported in the note, use the oldest one.
+
+4) Risk Factors: Across ALL of the notes below, count the total number of the following risk factors that the patient has.
+
+Consider the following specific risk factors:
+- currently treated diabetes mellitus,
+- current or recent (<90 days) smoker,
+- diagnosed and/or treated hypertension,
+- diagnosed hypercholesterolemia,
+- family history of coronary artery disease,
+- current obesity (body mass index [BMI] >30), or
+- a history of significant atherosclerosis strictly defined as the following: (coronary revascularization, myocardial infarction, stroke, or peripheral arterial disease). Do not infer the presence of atherosclerosis unless these specific diagnoses are listed.
+
+Step 1) For the patient notes below, across all the combined encounter notes, how many of the specific risk factors from the list above are present for the patient? Do not assume the presence of a risk factor unless it is explicitly stated. Do not include cardiac risk factors not in the above list.
+
+Step 2) Please determine the patient's risk factor subscore (one component of the overall HEART score).
+Choose between these options in brackets: [Risks Subscore = No known risk factors (0)] [Risks Subscore = 1-2 risk factors (1)] [Risks Subscore = >= 3 risk factors or any history of atherosclerotic disease (2)]
+If a history of significant atherosclerosis as strictly defined above is present, the risk score is always [Risks Subscore = >= 3 risk factors or any history of atherosclerotic disease (2)]. Do not assume significant atherosclerosis is present unless those specific diagnoses are present.
+
+5) Troponin: You will be given a laboratory results note relevant to the patient's current visit below, delimited by triple quotes. Considering the following scale and the laboratory results and reference ranges provided in the laboratory results note.
+Additionally, if the name of the troponin assay in the laboratory result note contains the phrases high sensitivity, hs- or other indication it is a high sensitivity assay, assume the units are ng/L and use 11 ng/L as the upper reference limit. Also, add the symbol * to the end of the reported score and report in your interpretation that this result may be inaccurate as the HEART score was originally validated with traditional troponin assays only.
+First, calculate the value for 3 times the upper limit of normal as you will need this value later.
+Choose between these options in brackets: [Troponin Subscore = < normal limit (0)] [Troponin Subscore = 1-3x normal limit (1)] [Troponin Subscore = >3x normal limit (2)] 
+For clarity on scoring:
+- Choose [Troponin Subscore = < normal limit (0)] if the reported troponin results is less than the reported upper reference limit.
+- Choose [Troponin Subscore = 1-3x normal limit (1)] if the reported troponin result is greater than the reported upper reference limit but is not greater than 3 times the upper reference limit.
+- Choose [Troponin Subscore = >3x normal limit (2)] if the reported troponin results is greater than 3 times the reported upper reference limit.
+If there is not enough information provided in the notes, or if the patient history is altogether not provided, please choose:
+[Not enough information - Pt troponin not present]
+
+Use this format for your response: 
+For each subscore, first explain your reasoning for the subscore and then conclude with your final answer for that subscore, in brackets, exactly like in the options below:
+
+[History Subscore = Slightly suspicious (0)] or [History Subscore = Moderately suspicious (1)] or [History Subscore = Highly suspicious (2)] 
+and
+[EKG Subscore = Normal (0)] or [EKG Subscore = Non-specific repolarization disturbance (1)] or [EKG Subscore = Significant ST deviation (2)] 
+and
+[Age Subscore = <45 (0)] or [Age Subscore = 45-64 (1)] or [Age Subscore = >= 65 (2)]
+and
+[Risks Subscore = No known risk factors (0)] or [Risks Subscore = 1-2 risk factors (1)] or [Risks Subscore = >= 3 risk factors or any history of atherosclerotic disease (2)]
+and
+[Troponin Subscore = < normal limit (0)] or [Troponin Subscore = 1-3x normal limit (1)] or [Troponin Subscore = >3x normal limit (2)] 
+
+If there is not enough information provided in the encounter note logs to calculate any one of the subscores, then for your final answer for that subscore please return one of the following in brackets:
+[History Subscore = Not Enough Information to Determine] or [EKG Subscore = Not Enough Information to Determine] or [Age Subscore = Not Enough Information to Determine] or [Risks Subscore = Not Enough Information to Determine] or [Troponin Subscore = Not Enough Information to Determine] 
+
+
+PATIENT ENCOUNTER NOTES:
+""""""""""""""""""""""""""""""""""""""""""""""""
+{AllNotes}
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""",

@@ -19,12 +19,15 @@ import os
 import openai
 
 DEV_TEST = True
-TRIALS = 1
+TRIALS = 25
 
-DEV_N_PATIENTS = 3
+DEV_N_PATIENTS = 50 #10
 MAX_INPUT_TOKENS = 125000
 GPT_TEMPERATURE = 0.5
+# GPT_ENGINE = "decile-gpt-35-turbo-16k"
 GPT_ENGINE = "decile-gpt-4-128K"
+# 0-indexed
+PROMPT_ITERATION = 999
 
 if DEV_TEST:
     TRIALS = 1
@@ -50,13 +53,12 @@ if DEV_TEST:
 # DeID is just a unique identifier for all patients or encounters; it can be used to right notes for a specific CPC encounter (including patient-level PMH) across all the datasets
 
 # Read the csv spreadsheet into a dataframe called "allNotes"
-
-# reading from Milgram
-prior_notes = pd.read_csv("/home/vs428/project/HeartScore_data/full_cohort/NOTES_PRIOR_IDENTIFIED_postprocessed_full.csv")
-ekg_notes = pd.read_csv("/home/vs428/project/HeartScore_data/full_cohort/EKG_HEART_IDENTIFIED_postprocessed_full.csv")
-troponin_vals = pd.read_csv(f"/home/vs428/project/HeartScore_data/trop_sorted.csv")
+prior_notes = pd.read_csv("/Users/vsocrates/Documents/Yale/Heart_Score/NOTES_PRIOR_IDENTIFIED_postprocessed.csv")
+ekg_notes = pd.read_csv("/Users/vsocrates/Documents/Yale/Heart_Score/EKG_HEART_IDENTIFIED_postprocessed.csv")
+troponin_vals = pd.read_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/trop_sorted.csv")
 # we are only using CPC notes to define our cohort and not passing them to GPT, since they contain the gold standard HEART score and may lead to data leakage
-cpc_notes = pd.read_csv("/home/vs428/project/HeartScore_data/full_cohort/NOTES_CPC_IDENTIFIED_postprocessed_full.csv")
+# cpc_notes = pd.read_csv("/Users/vsocrates/Documents/Yale/Heart_Score/NOTES_CPC_IDENTIFIED_postprocessed.csv")
+cpc_notes = pd.read_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/NOTES_CPC_IDENTIFIED_postprocessed_{PROMPT_ITERATION}.csv")
 
 prior_notes = prior_notes.rename({
                                   "PAT_ENC_CSN_ID":"CPC_PAT_ENC_CSN_ID",
@@ -177,9 +179,6 @@ def get_notes_by_enc_ID(row):
     return current_note_txt, current_ekg_notes_txt, all_notes_txt, troponin_txt
 
 
-if DEV_TEST:
-    cpc_notes = cpc_notes.sample(DEV_N_PATIENTS)
-
 gpt_input = cpc_notes.apply(get_notes_by_enc_ID, axis=1, result_type="expand")
 # TODO: we want to include troponin as a text element here? How? are the end of our current note? 
 gpt_input = gpt_input.rename({0:"Current_Note", 
@@ -232,12 +231,13 @@ def completion_with_backoff(**kwargs):
 def get_classification_from_completion(completion, last_only):
     matches = list(re.finditer(r"\[.+?\]", completion))
     if matches:
-        if last_only:
-            bracketed_info = matches[-1].group(0)
-            return bracketed_info
-        else:
-            # get all bracketed answers
-            return [match.group(0) for match in matches]
+    if last_only:
+        bracketed_info = matches[-1].group(0)
+        return bracketed_info
+    else:
+        # get all bracketed answers
+        return [match.group(0) for match in matches]
+
     else:
         return "ERROR - No bracketed phrase"
 
@@ -304,6 +304,9 @@ ekg_df = []
 risks_df = []
 troponin_df = []
 onepass_df = []
+
+if DEV_TEST:
+    cpc_notes_processed = cpc_notes_processed.sample(DEV_N_PATIENTS)
 
 for idx, (_, row) in enumerate(cpc_notes_processed.iterrows()):
     print(idx)
@@ -378,10 +381,10 @@ troponin_df = pd.DataFrame.from_records(troponin_df)
 onepass_df = pd.DataFrame.from_records(onepass_df)
 
 
-cpc_notes_processed.to_csv(f"/home/vs428/project/HeartScore_data/full_cohort/output/cpc_notes_with_gpt_input.csv")
-history_df.to_csv(f"/home/vs428/project/HeartScore_data/full_cohort/output/history_output.csv")
-age_df.to_csv(f"/home/vs428/project/HeartScore_data/full_cohort/output/age_output.csv")
-ekg_df.to_csv(f"/home/vs428/project/HeartScore_data/full_cohort/output/ekg_output.csv")
-risks_df.to_csv(f"/Users//home/vs428/project/HeartScore_data/full_cohort/risks_output.csv")
-troponin_df.to_csv(f"/home/vs428/project/HeartScore_data/full_cohort/output/troponin_output.csv")
-onepass_df.to_csv(f"/home/vs428/project/HeartScore_data/full_cohort/output/onepass_output.csv")
+cpc_notes_processed.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/cpc_notes_with_gpt_input_{str(PROMPT_ITERATION + 1)}.csv")
+history_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/history_sample_{str(PROMPT_ITERATION + 1)}.csv")
+age_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/age_sample_{str(PROMPT_ITERATION + 1)}.csv")
+ekg_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/ekg_sample_{str(PROMPT_ITERATION + 1)}.csv")
+risks_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/risks_sample_{str(PROMPT_ITERATION + 1)}.csv")
+troponin_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/troponin_sample_{str(PROMPT_ITERATION + 1)}.csv")
+onepass_df.to_csv(f"/Users/vsocrates/Documents/Yale/Heart_Score/output/onepass_sample_{str(PROMPT_ITERATION + 1)}.csv")
